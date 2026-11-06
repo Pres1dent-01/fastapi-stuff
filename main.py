@@ -1,3 +1,5 @@
+# Libraries
+
 from fastapi import FastAPI, Request, HTTPException, status
 # from fastapi.responses import HTMLResponse
 from fastapi.exceptions import RequestValidationError
@@ -5,14 +7,20 @@ from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from schemas import PostCreate, PostResponse
 
 
+# Creating a object of class
 app = FastAPI()
 
+# Mounting static files in the route so they are accessible in URL. We dont want to expose HTML so we put static files in app.mount
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# We add all the HTML files in the templates folder so that JinJa2 can find the html files and render it properly
 templates = Jinja2Templates(directory="templates")
 
+
+# Dummy Data: Type annotation 
 posts: list[dict] = [
     {
         "id": 1,
@@ -30,12 +38,19 @@ posts: list[dict] = [
     },
 ]
 
+###### 2 Types of Routes: Page Route and API Route ######
+###### Page Route renders HTML Responses so clients can see error in a nice format and not JSON ######
+###### API Route renders JSON Responses used for debugging ######
 
 
+##### Page Route #####
 @app.get("/", include_in_schema=False, name="home")
 @app.get("/posts", include_in_schema=False, name="posts")
 def home(request: Request):
     return templates.TemplateResponse(request, "home.html", {"posts": posts, "title":"Home"})
+
+
+
 
 
 @app.get("/post/{post_id}", include_in_schema=False)
@@ -52,22 +67,45 @@ def post_page(request:Request, post_id:int):
 
 
 
-@app.get("/api/posts")
+# API Routing
+
+
+@app.get("/api/posts", response_model=list[PostResponse])
 def get_posts():
     return posts
 
 
-@app.get("/api/posts/{post_id}")
+@app.post("/api/posts", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
+def create_post(post: PostCreate):
+    new_id = max(p["id"] for p in posts) + 1 if posts else 1
+    new_post = {
+        "id": new_id,
+        "author": post.author,
+        "title": post.title,
+        "content": post.content,
+        "date_posted": "April 23 2025"
+    }
+    posts.append(new_post)
+    return new_post
+
+
+
+@app.get("/api/posts/{post_id}", response_model=PostResponse)
 def get_post(post_id: int):
     for post in posts:
         if post.get("id") == post_id:
             return post
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
+
+
+
+
+
 @app.exception_handler(StarletteHTTPException)
 def general_http_exception_handler(request:Request, exception: StarletteHTTPException):
     message = (
-        exception.detail if exception.detail else "An error occurred. Pleasencheck your request and try again"
+        exception.detail if exception.detail else "An error occurred. Please check your request and try again"
     )
 
     if request.url.path.startswith("/api"):
@@ -86,6 +124,7 @@ def general_http_exception_handler(request:Request, exception: StarletteHTTPExce
         },
         status_code=exception.status_code
     )
+
 
 
 @app.exception_handler(RequestValidationError)
